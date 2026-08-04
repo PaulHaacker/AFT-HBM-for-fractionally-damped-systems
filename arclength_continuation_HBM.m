@@ -1,9 +1,10 @@
-function [om,X] = arclength_continuation_HBM(sys_jac,om_start,om_end,X0,n,N,L,tol,maxiter,sigma_start,sigma_max,plot_fun)
+function [om,X] = arclength_continuation_HBM(sys_jac_frac,alpha,om_start,om_end,X0,n,N,L,tol,maxiter,sigma_start,sigma_max,plot_fun)
 % Pseudo-arclength continuation with harmonic balance method for non-autonomous systems
 %
 % Input 
-%  sys_jac     : system description in the form sys_jac(t,x,omega) with right-hand side 
-%                and Jacobian in dependence of omega
+%  sys_jac     : system description in the form sys_jac(t,x,x_frac,omega) with right-hand side 
+%                and Jacobians (wrt x and x_frac) in dependence of omega
+%  alpha       : order of fractional damping
 %  om_start    : first value of omega
 %  om_end      : last value of omega
 %  X0          : initial guess for for the Fourier coefficients X
@@ -22,26 +23,34 @@ function [om,X] = arclength_continuation_HBM(sys_jac,om_start,om_end,X0,n,N,L,to
 
 % Remco Leine, INM, University of Stuttgart, 2023
 
-[om,X] = arclength_continuation(@(X,omega) residue(X,omega),om_start,om_end,X0,tol,maxiter,sigma_start,sigma_max,plot_fun);
+plot_on = nargin>12;
 
+if plot_on
+    [om,X] = arclength_continuation(@(X,omega) residue(X,omega),om_start,om_end,X0,tol,maxiter,sigma_start,sigma_max,plot_fun);
+else
+    [om,X] = arclength_continuation(@(X,omega) residue(X,omega),om_start,om_end,X0,tol,maxiter,sigma_start,sigma_max);
+end
     function [r,drdx,drdomega] = residue(X,omega)
     T = 2*pi/omega;
     dt = T/L;
     t = (0:dt:T-dt)';
-    [V,W,D] = fourier_matrices(omega,n,N,L); 
+    [V,W,D,D_alpha] = fourier_matrices(omega,n,N,L,alpha); 
     x_vec = V*X;
+    x_frac_vec = V*D_alpha*X;
     x = reshape(x_vec,n,L)';
+    x_frac = reshape(x_frac_vec,n,L)';
     f_vec = zeros(n*L,1);
     dfvecdxvec = zeros(n*L);
+    dfvecdxfracvec = zeros(n*L);
     for i=1:L
-        [f_i,dfdx_i] = sys_jac(t(i),x(i,:),omega);
+        [f_i,dfdx_i,dfdx_frac_i] = sys_jac_frac(t(i),x(i,:),x_frac(i,:),omega);
         f_vec(n*(i-1)+1:i*n) = f_i;
         dfvecdxvec(n*(i-1)+1:i*n,n*(i-1)+1:i*n) = dfdx_i;
+        dfvecdxfracvec(n*(i-1)+1:i*n,n*(i-1)+1:i*n) = dfdx_frac_i;
     end
-    F = W'*f_vec;
-    r = D*X - F;
-    drdx = D-W'*dfvecdxvec*V;
-    drdomega = omega\D*X;
+    r = D*X - W'*f_vec;
+    drdx = D-W'*(dfvecdxvec*V + dfvecdxfracvec*V*D_alpha);
+    drdomega = omega\D*X-W'*dfvecdxfracvec*V*alpha/omega*D_alpha*X;
     end
 
 end

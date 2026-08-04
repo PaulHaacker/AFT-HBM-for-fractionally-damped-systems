@@ -93,15 +93,17 @@ ylabel('q')
 alpha = 1;
 beta = 0.04;
 gamma = 1;
-delta = 0.1;
-omega = 0.1;
+delta = 0.0;0.1;
+omega_start = 2;0.1;
+omega_end = 0.1;2;
 L = 100;
 N = 5;
 n = 2;
 X0 = zeros(n*(2*N+1),1);
 
-[X0,r,conv,k] = HBM_nonaut(@(t,x) duffing_jac(t,x,alpha,beta,gamma,delta,omega),X0,omega,n,N,L,1e-5,100);
-[om,X] = arclength_continuation_HBM(@(t,x,omega) duffing_jac(t,x,alpha,beta,gamma,delta,omega),0.1,2,X0,n,N,L,1e-5,100,1e-2,0.1,@(om,X) plot_fun_HBM(om,X,n,N,L));
+[X0,r,conv,k] = HBM_nonaut(@(t,x) duffing_jac(t,x,alpha,beta,gamma,delta,omega),X0,omega_start,n,N,L,1e-5,100);
+% [om,X] = arclength_continuation_HBM(@(t,x,omega) duffing_jac(t,x,alpha,beta,gamma,delta,omega),0.1,2,X0,n,N,L,1e-5,100,1e-2,0.1,@(om,X) plot_fun_HBM(om,X,n,N,L));
+[om,X] = arclength_continuation_HBM(@(t,x,omega) duffing_jac(t,x,alpha,beta,gamma,delta,omega),omega_start,omega_end,X0,n,N,L,1e-5,100,1e-2,0.1);
 
 A = zeros(length(om),1);
 for i=1:length(om)
