@@ -65,6 +65,10 @@ while (mu(j) <= max(mu_start,mu_end)) && (mu(j)>=min(mu_start,mu_end))
         Dmu = Dz(end);
         x_c = x_c + Dx;
         mu_c= mu_c + Dmu;
+        if mu_c<=0 || ~isreal(x_c) || ~isreal(mu_c)
+            conv = false;   % step overshot into an unphysical (negative/complex) mu
+            break
+        end
         conv = norm(F)<tol;
     end
     if conv
