@@ -32,7 +32,7 @@ sigma = 1;
 beta = 0.04;
 gamma = 1;
 delta = 0.1;
-alpha_vec = [ .01, .6, .8, 1];
+alpha_vec = [ .4, .6, .8, 1];
 
 omega_start = 0.1;
 omega_end = 20;
