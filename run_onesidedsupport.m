@@ -1,25 +1,25 @@
 %% Task 3.4
 clear; clc; close all
-%% Parameters of [PadovanSawicki1998]
-
-% sigma = 1;
-% beta = 0.01; %0.01
-% gamma = 1;
-% delta = 0.15;
-% alpha = 1/4;
-% omega_start = 0.1;
-% omega_end = 2;
-
-% N = 10;
-
-% L = 20*floor((2*N+1)*1.2); % number of sample points of one period
-% n = 2;
-
 %% Parameters of Workshop
-% sigma = 1;
-% beta = 0.04;
+mu = 1; % called alpha in workshop
+beta = 6;
+gamma = 1;
+delta = 0.2;
+alpha = 1;
+
+omega_start = 0.1;
+omega_end = 5;
+
+L = 100;
+N = 5;
+n = 2;
+
+%% random parameters
+
+% mu = 1; % called alpha in workshop
+% beta = 6;
 % gamma = 1;
-% delta = 0.1;
+% delta = 0.2;
 % alpha = 1;
 
 % omega_start = 0.1;
@@ -29,25 +29,10 @@ clear; clc; close all
 % N = 5;
 % n = 2;
 
-%% random parameters
-
-sigma = 1;
-beta = -0.01; %0.01
-gamma = .75;
-delta = 0.15;
-alpha = 1;
-omega_start = 0.1;
-omega_end = 2;
-
-N = 10;
-
-L = 20*floor((2*N+1)*1.2); % number of sample points of one period
-n = 2;
-
 %% Arclength continuation with HBM
 X0 = zeros(n*(2*N+1),1);
 
-[om,X] = arclength_continuation_HBM(@(t,x,x_frac,omega) duffing_jac_frac(t,x,x_frac,sigma,beta,gamma,delta,omega),alpha,omega_start,omega_end,X0,n,N,L,1e-5,100,1e-2,0.1);
+[om,X] = arclength_continuation_HBM(@(t,x,x_frac,omega) onesidedsupport_jac_frac(t,x,x_frac,mu,beta,gamma,delta,omega),alpha,omega_start,omega_end,X0,n,N,L,1e-5,100,1e-2,0.1);
 
 A_HBM = zeros(length(om),1);
 for i=1:length(om)
@@ -66,7 +51,7 @@ legend('Interpreter','latex')
 real_interval = [-20, 0];
 imag_interval = [-1/2, 1/2]*om(1);
 num_points = 5; % grid resolution for initial search of Floquet exponents at om(1) via FractionalHillZeros
-Lambdas = getFloquetExponents(om, X, @(t,x,x_frac,omega) duffing_jac_frac(t,x,x_frac,sigma,beta,gamma,delta,omega),...
+Lambdas = getFloquetExponents(om, X, @(t,x,x_frac,omega) onesidedsupport_jac_frac(t,x,x_frac,mu,beta,gamma,delta,omega),...
                                 alpha, n, N, L, ...
                                 real_interval, imag_interval, num_points);
 

@@ -16,7 +16,7 @@ lambdas  = [];
 
 for k = 1:length(lambda0)
     [lambda, ~, exitflag] = newton_numericalGradient(zero_fcn, lambda0(k), tol_newton, 100);
-    if exitflag && (isempty(lambdas) || all(abs(lambda - lambdas) > tol_dup))
+    if exitflag && (isempty(lambdas) || all(abs(lambda - [lambdas; conj(lambdas)]) > tol_dup))
         lambdas = [lambdas; lambda];
     end
 end

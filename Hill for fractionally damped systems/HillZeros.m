@@ -35,7 +35,7 @@ function lambdas = HillZeros(Mat_H_N_alpha, x_interval, y_interval, num_points, 
                 [x_solved, ~, exitflag] = newton_numericalGradient(zero_fcn, x_0, 1e-13, 100);
                 if exitflag > 0
                     lambda = x_solved(1) + 1i * x_solved(2);
-                    diffs = abs(lambda - lambdas);
+                    diffs = abs(lambda - [lambdas; conj(lambdas)]);
                     if all(diffs > tolerance_duplicates)
                         deflation_terms{end+1} = x_solved;
                         zero_fcn = @(x) zero_fcn_base(x) .* deflation_multiplier(x, deflation_terms);
@@ -61,7 +61,7 @@ function lambdas = HillZeros(Mat_H_N_alpha, x_interval, y_interval, num_points, 
                 x_0 = x_vals(ii)+1i* y_vals(jj);
                 [lambda, ~, exitflag] = newton_numericalGradient(zero_fcn, x_0, 1e-13, 100);
                 if exitflag > 0
-                    diffs = abs(lambda - lambdas);
+                    diffs = abs(lambda - [lambdas; conj(lambdas)]);
                     if all(diffs > tolerance_duplicates)
                         deflation_terms{end+1} = lambda;
                         zero_fcn = @(x) zero_fcn_base(x) .* deflation_multiplier(x, deflation_terms);
