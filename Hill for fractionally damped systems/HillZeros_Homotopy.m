@@ -1,6 +1,6 @@
-function lambdas = FractionalHillZeros_Homotopy(omega, alpha, J_cell, max_iter, tol_newton, tol_dup)
-% FractionalHillZeros_Homotopy finds Floquet exponents of a fractional Hill
-% problem via homotopy continuation in alpha from alpha=1 to the target alpha.
+function lambdas = HillZeros_Homotopy(omega, alpha, J_cell, C0, max_iter, tol_newton, tol_dup)
+% HillZeros_Homotopy finds Floquet exponents of a Hill
+% problem of fractionally damped systems via homotopy continuation in alpha from alpha=1 to the target alpha.
 %
 % At alpha=1 the Floquet exponents are the eigenvalues of Mat_H_1(0)
 % (principal strip -omega/2 < Im(lambda) <= omega/2).  alpha is then
@@ -24,7 +24,7 @@ if nargin < 4, max_iter    = 40;    end
 
 % --- alpha=1 starting point: eigenvalues of H_1(0) ---
 % For alpha=1: det(H(lambda))=0  <=>  H_1(0)*v = lambda*v
-Mat_H1   = giveFracHill(omega, 1, J_cell);
+Mat_H1   = giveHill(omega, 1, J_cell, zeros(size(C0)));
 eig_all  = eig(Mat_H1(0));
 in_strip = imag(eig_all) > -omega/2 & imag(eig_all) <= omega/2;
 lambdas  = eig_all(in_strip);
@@ -51,7 +51,7 @@ while ~goal
             goal = true;
         end
 
-        Mat_H_beta_new = giveFracHill(omega, beta_new, J_cell);
+        Mat_H_beta_new = giveHill(omega, beta_new, J_cell, C0);
         Mat_H_beta_new = normalizeMatrix(Mat_H_beta_new,length(J_cell{1}),beta_new);
         zero_fcn = @(lam) det(Mat_H_beta_new(lam));
 
