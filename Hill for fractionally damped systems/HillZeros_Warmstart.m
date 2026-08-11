@@ -1,4 +1,4 @@
-function lambdas = FractionalHillZeros_Warmstart(Mat_norm, lambda0, tol_newton, tol_dup)
+function lambdas = HillZeros_Warmstart(Mat_norm, lambda0, tol_newton, tol_dup)
 % Finds zeros of the normalized Hill matrix using warm-start Newton iterations.
 % No grid search — each entry of lambda0 seeds one Newton run.
 %

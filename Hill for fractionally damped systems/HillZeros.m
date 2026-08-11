@@ -1,5 +1,5 @@
-function lambdas = FractionalHillZeros(Mat_H_N_alpha, x_interval, y_interval, num_points, varargin)
-    % FractionalHillZeros finds zeros of a matrix-valued function in a complex rectangle.
+function lambdas = HillZeros(Mat_H_N_alpha, x_interval, y_interval, num_points, varargin)
+    % HillZeros finds zeros of a matrix-valued function in a complex rectangle.
     %
     % Required:
     % Mat_H_N_alpha: Function handle to matrix-valued function.
