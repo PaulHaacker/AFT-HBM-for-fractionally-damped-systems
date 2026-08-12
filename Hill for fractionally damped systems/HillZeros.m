@@ -1,17 +1,21 @@
-function lambdas = HillZeros(Mat_H_N_alpha, x_interval, y_interval, num_points, varargin)
+function lambdas = HillZeros(Mat_H_N_alpha, om, x_interval, y_interval, num_points, varargin)
     % HillZeros finds zeros of a matrix-valued function in a complex rectangle.
     %
     % Required:
     % Mat_H_N_alpha: Function handle to matrix-valued function.
+    % om: frequency parameter.
     % x_interval: [x_min, x_max] real part of search domain.
     % y_interval: [y_min, y_max] imaginary part of search domain.
     % num_points: Number of grid points in each direction.
     %
     % Optional:
     % method: (string) Solver method, default: 'NewtonComplexScalarVectorized'
+
+    % compute period time
+    T = 2*pi/om;
     
     % Handle optional input
-    if nargin >= 5
+    if nargin >= 6
         method = varargin{1};
     else
         method = 'NewtonComplexScalarVectorized';
@@ -35,7 +39,13 @@ function lambdas = HillZeros(Mat_H_N_alpha, x_interval, y_interval, num_points, 
                 [x_solved, ~, exitflag] = newton_numericalGradient(zero_fcn, x_0, 1e-13, 100);
                 if exitflag > 0
                     lambda = x_solved(1) + 1i * x_solved(2);
-                    diffs = abs(lambda - [lambdas; conj(lambdas)]);
+                    % check for duplicates in the same FE group
+                    % distance to nearest alias, instead of multiplier distance
+                    k = round((imag(lambda) - imag(lambdas)) / om);
+                    diffs = abs(lambda - lambdas - 1i*k*om);
+
+                    % compare Floquet multipliers to check for duplicates
+                    % diffs = abs(exp(lambda*T) - exp(lambdas*T));
                     if all(diffs > tolerance_duplicates)
                         deflation_terms{end+1} = x_solved;
                         zero_fcn = @(x) zero_fcn_base(x) .* deflation_multiplier(x, deflation_terms);
@@ -61,7 +71,13 @@ function lambdas = HillZeros(Mat_H_N_alpha, x_interval, y_interval, num_points, 
                 x_0 = x_vals(ii)+1i* y_vals(jj);
                 [lambda, ~, exitflag] = newton_numericalGradient(zero_fcn, x_0, 1e-13, 100);
                 if exitflag > 0
-                    diffs = abs(lambda - [lambdas; conj(lambdas)]);
+                    % compare Floquet multipliers to check for duplicates
+                    % diffs = abs(exp(lambda*T) - exp(lambdas*T));
+                    % check for duplicates in the same FE group
+                    % distance to nearest alias, instead of multiplier distance
+                    k = round((imag(lambda) - imag(lambdas)) / om);
+                    diffs = abs(lambda - lambdas - 1i*k*om);
+
                     if all(diffs > tolerance_duplicates)
                         deflation_terms{end+1} = lambda;
                         zero_fcn = @(x) zero_fcn_base(x) .* deflation_multiplier(x, deflation_terms);

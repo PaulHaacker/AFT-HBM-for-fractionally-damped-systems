@@ -10,8 +10,9 @@ alpha = 1;
 omega_start = 0.1;
 omega_end = 5;
 
-L = 100;
-N = 5;
+N = 10;
+
+L = 20*floor((2*N+1)*1.2); % number of sample points of one period
 n = 2;
 
 %% random parameters

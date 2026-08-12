@@ -29,45 +29,56 @@ addpath(fullfile(fileparts(mfilename('fullpath')), 'Hill for fractionally damped
 num_om  = length(om);
 Lambdas = cell(num_om, 1);
 
+% extract C0 for homotopy search 
+[~,~,C0] = sys_jac(0, zeros(n,1), zeros(n,1), om(1)); % using that right-hand side is linear in D^\alpha x, so C0 is constant
+
 % --- kk = 1: full grid search ---
-fprintf('getFloquetExponents: grid search at om(1) = %.4f ... ', om(1))
-Mat_norm    = build_mat_norm(om(1), X(:,1), sys_jac, alpha, n, N, L);
-lambdas_all = HillZeros(Mat_norm, real_interval, imag_interval, num_points, 'newtoncomplexscalar');
-Lambdas{1}  = lambdas_all(abs(imag(lambdas_all)) <= om(1)/2);
-fprintf('found %d exponents\n', length(Lambdas{1}))
+% fprintf('getFloquetExponents: grid search at om(1) = %.4f ... ', om(1))
+% Mat_norm    = build_mat_norm(om(1), X(:,1), sys_jac, alpha, n, N, L);
+% lambdas_all = HillZeros(Mat_norm, om(1), real_interval, imag_interval, num_points, 'newtoncomplexscalar');
+% Lambdas{1}  = lambdas_all(abs(imag(lambdas_all)) <= om(1)/2);
+% fprintf('found %d exponents\n', length(Lambdas{1}))
 
 % % --- kk = 1: Homotopy search
-% fprintf('FractionalHillZeros_Homotopy ... ')
-% tic
-% J_rfs   = jacobian_fourier_coeffs(X(:,1), om(1), sys_jac, alpha, n, N, L);
-% J_cell  = real2complex_fourier_jacobian(J_rfs);
-% lambdas_homotopy = FractionalHillZeros_Homotopy(om(1), alpha, J_cell);
-% fprintf('%.2f s, %d exponents found\n', toc, length(lambdas_homotopy))
-% Lambdas{1} = lambdas_homotopy;
+fprintf('HillZeros_Homotopy ... ')
+tic
+J_rfs   = jacobian_fourier_coeffs(X(:,1), om(1), sys_jac, alpha, n, N, L);
+J_cell  = real2complex_fourier_jacobian(J_rfs);
+[~,~,C0] = sys_jac(0, zeros(n,1), zeros(n,1), om(1)); % using that right-hand side is linear in D^\alpha x, so C0 is constant
+lambdas_homotopy = HillZeros_Homotopy(om(1), alpha, J_cell,C0);
+fprintf('%.2f s, %d exponents found\n', toc, length(lambdas_homotopy))
+Lambdas{1} = lambdas_homotopy;
 
 % --- kk >= 2: warm-start Newton ---
+tol_group_dup = 1e-4; % tolerance (in lambda-space) below which two exponents are considered aliases of the same group
 n_exp_ref = length(Lambdas{1});
 for kk = 2:num_om
     Mat_norm    = build_mat_norm(om(kk), X(:,kk), sys_jac, alpha, n, N, L);
     Lambdas{kk} = HillZeros_Warmstart(Mat_norm, Lambdas{kk-1});
-    % rerun grid search if count changed or warm-start returned nothing
+    % rerun homotopy search if count changed, warm-start returned nothing,
+    % or two of the warm-started exponents collapsed onto the same group
     % (the empty case must be caught explicitly: 0==0 would otherwise skip the fallback)
-    if isempty(Lambdas{kk}) || length(Lambdas{kk}) ~= n_exp_ref
-        fprintf('  kk=%d: exponent count changed (%d -> %d), rerunning grid search ... ', ...
-                kk, n_exp_ref, length(Lambdas{kk}))
-        lambdas_retry = HillZeros(Mat_norm, real_interval, imag_interval, num_points, 'newtoncomplexscalar');
-        Lambdas{kk}   = lambdas_retry(abs(imag(lambdas_retry)) <= om(kk)/2);
-        n_exp_ref     = length(Lambdas{kk});
-        fprintf('found %d exponents\n', n_exp_ref)
-
-        % tic
-        % fprintf('  kk=%d: exponent count changed (%d -> %d), rerunning homotopy search ... ', ...
+    has_dup = has_alias_duplicate(Lambdas{kk}, om(kk), tol_group_dup);
+    if isempty(Lambdas{kk}) || length(Lambdas{kk}) ~= n_exp_ref || has_dup
+        % fprintf('  kk=%d: exponent count changed (%d -> %d), rerunning grid search ... ', ...
         %         kk, n_exp_ref, length(Lambdas{kk}))
-        % J_rfs   = jacobian_fourier_coeffs(X(:,kk), om(kk), sys_jac, alpha, n, N, L);
-        % J_cell  = real2complex_fourier_jacobian(J_rfs);
-        % lambdas_homotopy = FractionalHillZeros_Homotopy(om(kk), alpha, J_cell);
-        % Lambdas{kk} = lambdas_homotopy;
-        % fprintf('%.2f s, %d exponents found\n', toc, length(lambdas_homotopy))
+        % lambdas_retry = HillZeros(Mat_norm, om(kk), real_interval, imag_interval, num_points, 'newtoncomplexscalar');
+        % Lambdas{kk}   = lambdas_retry(abs(imag(lambdas_retry)) <= om(kk)/2);
+        % n_exp_ref     = length(Lambdas{kk});
+        % fprintf('found %d exponents\n', n_exp_ref)
+
+        if has_dup && length(Lambdas{kk}) == n_exp_ref
+            fprintf('  kk=%d: two exponents collapsed onto the same group, rerunning homotopy search ... ', kk)
+        else
+            fprintf('  kk=%d: exponent count changed (%d -> %d), rerunning homotopy search ... ', ...
+                    kk, n_exp_ref, length(Lambdas{kk}))
+        end
+        tic
+        J_rfs   = jacobian_fourier_coeffs(X(:,kk), om(kk), sys_jac, alpha, n, N, L);
+        J_cell  = real2complex_fourier_jacobian(J_rfs);
+        lambdas_homotopy = HillZeros_Homotopy(om(kk), alpha, J_cell,C0);
+        Lambdas{kk} = lambdas_homotopy;
+        fprintf('%.2f s, %d exponents found\n', toc, length(lambdas_homotopy))
     end
     if mod(kk, 50) == 0
         fprintf('  processed %d / %d\n', kk, num_om)
@@ -128,6 +139,25 @@ if do_debug
     title('DEBUG: Floquet exponents in complex plane', 'Interpreter', 'latex')
     axis tight; box on
 end
+end
+
+% -------------------------------------------------------------------------
+function tf = has_alias_duplicate(lambdas, om, tol)
+    % returns true if two entries of lambdas are aliases of the same
+    % underlying Floquet exponent, i.e. they differ by (approximately) an
+    % integer multiple of i*om (see HillZeros.m for the same distance
+    % metric used during grid-search deflation)
+    tf = false;
+    for ii = 1:length(lambdas)-1
+        for jj = ii+1:length(lambdas)
+            k    = round((imag(lambdas(ii)) - imag(lambdas(jj))) / om);
+            dist = abs(lambdas(ii) - lambdas(jj) - 1i*k*om);
+            if dist < tol
+                tf = true;
+                return
+            end
+        end
+    end
 end
 
 % -------------------------------------------------------------------------

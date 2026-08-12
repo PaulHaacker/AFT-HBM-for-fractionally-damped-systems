@@ -16,26 +16,12 @@ clear; clc; close all
 % n = 2;
 
 %% Parameters of Workshop
-% sigma = 1;
-% beta = 0.04;
-% gamma = 1;
-% delta = 0.1;
-% alpha = 1;
-
-% omega_start = 0.1;
-% omega_end = 2;
-
-% L = 100;
-% N = 5;
-% n = 2;
-
-%% random parameters
-
 sigma = 1;
-beta = -0.01; %0.01
-gamma = .75;
-delta = 0.15;
+beta = 0.04;
+gamma = 1;
+delta = 0.1;
 alpha = 1;
+
 omega_start = 0.1;
 omega_end = 2;
 
@@ -43,6 +29,21 @@ N = 10;
 
 L = 20*floor((2*N+1)*1.2); % number of sample points of one period
 n = 2;
+
+%% random parameters
+
+% sigma = 1;
+% beta = -0.01; %0.01
+% gamma = .75;
+% delta = 0.15;
+% alpha = 1;
+% omega_start = 0.1;
+% omega_end = 2;
+
+% N = 10;
+
+% L = 20*floor((2*N+1)*1.2); % number of sample points of one period
+% n = 2;
 
 %% Arclength continuation with HBM
 X0 = zeros(n*(2*N+1),1);

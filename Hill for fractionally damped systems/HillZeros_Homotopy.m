@@ -10,7 +10,7 @@ function lambdas = HillZeros_Homotopy(omega, alpha, J_cell, C0, max_iter, tol_ne
 % Inputs:
 %   omega      : excitation frequency
 %   alpha      : target fractional order
-%   J_cell     : Fourier coefficients of J(t), same format as giveFracHill
+%   J_cell     : Fourier coefficients of J(t), same format as giveHill
 %   max_iter   : maximum number adaptive stepsize reduction (default 20)
 %   tol_newton : Newton convergence tolerance           (default 1e-13)
 %   tol_dup    : duplicate-detection tolerance          (default 1e-4)
@@ -18,13 +18,31 @@ function lambdas = HillZeros_Homotopy(omega, alpha, J_cell, C0, max_iter, tol_ne
 % Output:
 %   lambdas : column vector of principal Floquet exponents at target alpha
 
-if nargin < 6, tol_dup    = 1e-4;  end
-if nargin < 5, tol_newton = 1e-13; end
-if nargin < 4, max_iter    = 40;    end
+if nargin < 7, tol_dup    = 1e-4;  end
+if nargin < 6, tol_newton = 1e-13; end
+if nargin < 5, max_iter    = 40;    end
 
 % --- alpha=1 starting point: eigenvalues of H_1(0) ---
 % For alpha=1: det(H(lambda))=0  <=>  H_1(0)*v = lambda*v
-Mat_H1   = giveHill(omega, 1, J_cell, zeros(size(C0)));
+
+% attention! we assume that the underlying system is a mechanical system and linear in the fractional derivative.
+
+% extract system dimension
+test = size(cell2mat(J_cell));
+n = test(1);           % n - system size
+f = n/2;           % f - number of degrees of freedom of mechanical system
+N = (test(2)/n-1)/4;   % N - number of frequencies considered in truncation
+if N~=int8(N)
+    error('wrong dimension of J')
+end
+
+J_cell_initial = J_cell;
+
+% use that in the case alpha =1 we just have regular damping, but we must bring the damping matrix C0 into the Fourier coefficients of J(t) 
+C0_tilde = C0(f+1:end,1:f); % assuming that C0 = [0, 0; C0_tilde, 0]
+J_cell_initial{2*N+1} = J_cell_initial{2*N+1} + [zeros(f,2*f); zeros(f,f), C0_tilde];
+
+Mat_H1   = giveHill(omega, 1, J_cell_initial, zeros(size(C0)));
 eig_all  = eig(Mat_H1(0));
 in_strip = imag(eig_all) > -omega/2 & imag(eig_all) <= omega/2;
 lambdas  = eig_all(in_strip);
