@@ -1,5 +1,6 @@
 %% Task 3.4
-clear; clc; close all
+clear; clc; 
+% close all
 %% Parameters of [PadovanSawicki1998]
 % sigma = 1;
 % beta = 0.01;
@@ -35,7 +36,7 @@ delta = 0.1;
 alpha_vec = [ .4, .6, .8, 1];
 
 omega_start = 0.1;
-omega_end = 20;
+omega_end = 5;
 
 L = 100;
 N = 5;
