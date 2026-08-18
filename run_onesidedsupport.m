@@ -21,7 +21,7 @@ mu = 1; % called alpha in workshop
 beta = 6;
 gamma = 1;
 delta = 0.2;
-alpha = 1;
+alpha = .25;
 
 omega_start = 1;
 omega_end = 5;

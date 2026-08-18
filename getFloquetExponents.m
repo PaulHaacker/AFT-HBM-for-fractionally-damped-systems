@@ -1,28 +1,37 @@
 function Lambdas = getFloquetExponents(om, X, sys_jac, alpha, n, N, L, ...
-                                       real_interval, imag_interval, num_points, debug)
+                                       real_interval, imag_interval, num_points, debug, SearchMethod)
 % Computes Floquet exponents along a HBM continuation curve [om, X] of a fractionally damped system of the form \dot x= f(t, x, D^\alpha x) with linearization dynamics \dot y = J(t)y + C0 D^{\alpha}y, i.e. we assume f is linear in D^\alpha x.
 %
 % Strategy:
-%   om(1)   : full grid search via FractionalHillZeros, then keep all
-%             exponents with |imag(lambda)| <= imag_interval(2).
+%   om(1)   : full search (grid search or homotopy search, see SearchMethod)
 %   om(kk>=2): warm-start Newton via FractionalHillZeros_Warmstart using the
-%             exponents found at om(kk-1) as initial guesses — no grid search.
+%             exponents found at om(kk-1) as initial guesses; falls back to
+%             a full search (see SearchMethod) if the count changed, the
+%             warm-start returned nothing, or two exponents collapsed onto
+%             the same alias group.
 %
 % Inputs:
 %   om, X          : output of arclength_continuation_HBM
-%   sys_jac        : system description in the form sys_jac(t,x,x_frac,omega) with right-hand side 
+%   sys_jac        : system description in the form sys_jac(t,x,x_frac,omega) with right-hand side
 %                    and Jacobians (wrt x and x_frac) in dependence of omega
 %   alpha          : fractional order
 %   n, N, L        : state dimension, number of harmonics, sample points
-%   real_interval  : [re_min, re_max] for initial grid search
-%   imag_interval  : [im_min, im_max] for initial grid search
-%   num_points     : grid resolution per dimension for initial search
+%   real_interval  : [re_min, re_max] for initial grid search (default [-20, 0])
+%   imag_interval  : [im_min, im_max] for initial grid search (default [-1/2, 1/2]*om(1))
+%   num_points     : grid resolution per dimension for initial search (default 5)
 %   debug          : pass 'debugging' to enable diagnostic prints and plots
+%   SearchMethod   : 'HomotopySearch' (default) or 'GridSearch' — method used
+%                    for the full search at om(1) and for every fallback
+%                    search during the continuation
 %
 % Output:
 %   Lambdas : cell array, Lambdas{kk} is a column vector of Floquet exponents at om(kk)
 
-if nargin < 11, debug = ''; end
+if nargin < 12 || isempty(SearchMethod),  SearchMethod  = 'HomotopySearch';      end
+if nargin < 11 || isempty(debug),         debug         = '';                    end
+if nargin < 10 || isempty(num_points),    num_points    = 5;                     end
+if nargin < 9  || isempty(imag_interval), imag_interval = [-1/2, 1/2]*om(1);     end
+if nargin < 8  || isempty(real_interval), real_interval = [-20, 0];              end
 do_debug = strcmpi(debug, 'debugging');
 
 addpath(fullfile(fileparts(mfilename('fullpath')), 'Hill for fractionally damped systems'))
@@ -32,22 +41,12 @@ Lambdas = cell(num_om, 1);
 % extract C0 for homotopy search 
 [~,~,C0] = sys_jac(0, zeros(n,1), zeros(n,1), om(1)); % using that right-hand side is linear in D^\alpha x, so C0 is constant
 
-% --- kk = 1: full grid search ---
-% fprintf('getFloquetExponents: grid search at om(1) = %.4f ... ', om(1))
-% Mat_norm    = build_mat_norm(om(1), X(:,1), sys_jac, alpha, n, N, L);
-% lambdas_all = HillZeros(Mat_norm, om(1), real_interval, imag_interval, num_points, 'newtoncomplexscalar');
-% Lambdas{1}  = lambdas_all(abs(imag(lambdas_all)) <= om(1)/2);
-% fprintf('found %d exponents\n', length(Lambdas{1}))
-
-% % --- kk = 1: Homotopy search
-fprintf('HillZeros_Homotopy ... ')
+% --- kk = 1: full search ---
+fprintf('getFloquetExponents: %s at om(1) = %.4f ... ', SearchMethod, om(1))
 tic
-J_rfs   = jacobian_fourier_coeffs(X(:,1), om(1), sys_jac, alpha, n, N, L);
-J_cell  = real2complex_fourier_jacobian(J_rfs);
-[~,~,C0] = sys_jac(0, zeros(n,1), zeros(n,1), om(1)); % using that right-hand side is linear in D^\alpha x, so C0 is constant
-lambdas_homotopy = HillZeros_Homotopy(om(1), alpha, J_cell,C0);
-fprintf('%.2f s, %d exponents found\n', toc, length(lambdas_homotopy))
-Lambdas{1} = lambdas_homotopy;
+Lambdas{1} = run_full_search(SearchMethod, om(1), X(:,1), sys_jac, alpha, n, N, L, ...
+                              C0, real_interval, imag_interval, num_points);
+fprintf('%.2f s, %d exponents found\n', toc, length(Lambdas{1}))
 
 % --- kk >= 2: warm-start Newton ---
 tol_group_dup = 1e-4; % tolerance (in lambda-space) below which two exponents are considered aliases of the same group
@@ -55,31 +54,52 @@ n_exp_ref = length(Lambdas{1});
 for kk = 2:num_om
     Mat_norm    = build_mat_norm(om(kk), X(:,kk), sys_jac, alpha, n, N, L);
     Lambdas{kk} = HillZeros_Warmstart(Mat_norm, Lambdas{kk-1});
+    
     % rerun homotopy search if count changed, warm-start returned nothing,
     % or two of the warm-started exponents collapsed onto the same group
     % (the empty case must be caught explicitly: 0==0 would otherwise skip the fallback)
+
     has_dup = has_alias_duplicate(Lambdas{kk}, om(kk), tol_group_dup);
     if isempty(Lambdas{kk}) || length(Lambdas{kk}) ~= n_exp_ref || has_dup
-        % fprintf('  kk=%d: exponent count changed (%d -> %d), rerunning grid search ... ', ...
-        %         kk, n_exp_ref, length(Lambdas{kk}))
-        % lambdas_retry = HillZeros(Mat_norm, om(kk), real_interval, imag_interval, num_points, 'newtoncomplexscalar');
-        % Lambdas{kk}   = lambdas_retry(abs(imag(lambdas_retry)) <= om(kk)/2);
-        % n_exp_ref     = length(Lambdas{kk});
-        % fprintf('found %d exponents\n', n_exp_ref)
-
         if has_dup && length(Lambdas{kk}) == n_exp_ref
-            fprintf('  kk=%d: two exponents collapsed onto the same group, rerunning homotopy search ... ', kk)
+            fprintf('  kk=%d: two exponents collapsed onto the same group, rerunning %s ... ', kk, SearchMethod)
         else
-            fprintf('  kk=%d: exponent count changed (%d -> %d), rerunning homotopy search ... ', ...
-                    kk, n_exp_ref, length(Lambdas{kk}))
+            fprintf('  kk=%d: exponent count changed (%d -> %d), rerunning %s ... ', ...
+                    kk, n_exp_ref, length(Lambdas{kk}), SearchMethod)
         end
         tic
-        J_rfs   = jacobian_fourier_coeffs(X(:,kk), om(kk), sys_jac, alpha, n, N, L);
-        J_cell  = real2complex_fourier_jacobian(J_rfs);
-        lambdas_homotopy = HillZeros_Homotopy(om(kk), alpha, J_cell,C0);
-        Lambdas{kk} = lambdas_homotopy;
-        fprintf('%.2f s, %d exponents found\n', toc, length(lambdas_homotopy))
+        Lambdas{kk} = run_full_search(SearchMethod, om(kk), X(:,kk), sys_jac, alpha, n, N, L, ...
+                                       C0, real_interval, imag_interval, num_points, Mat_norm);
+        fprintf('%.2f s, %d exponents found\n', toc, length(Lambdas{kk}))
     end
+
+    % % shift all exponents into the principal strip (-om/2, om/2] 
+    % shifted_imag = mod(imag(Lambdas{kk}), om(kk));
+    % too_high = shifted_imag > om(kk)/2;
+    % shifted_imag(too_high) = shifted_imag(too_high) - om(kk);
+    % Lambdas_shifted = Lambdas{kk} - imag(Lambdas{kk})*1i  + shifted_imag*1i;
+
+    % % test whether shifted exponents are roots of the Hill matrix
+    % for kk2 = 1:length(Lambdas_shifted)
+    %     lambda_test = Lambdas_shifted(kk2);
+    %     det_H = det(Mat_norm(lambda_test));
+    %     if abs(det_H) > 1e-13
+    %         warning('getFloquetExponents: shifted exponent %d at om(kk=%d) is not a root of the Hill matrix (|det(H)| = %.3e), re-running warmstart search', ...
+    %                 kk2, kk, abs(det_H))
+            
+    %         Lambdas_shifted(kk2) = HillZeros_Warmstart(Mat_norm, Lambdas_shifted(kk2));
+
+    %         % J_rfs   = jacobian_fourier_coeffs(X(:,kk), om(kk), sys_jac, alpha, n, N, L);
+    %         % J_cell  = real2complex_fourier_jacobian(J_rfs);
+    %         % lambdas_homotopy = HillZeros_Homotopy(om(kk), alpha, J_cell,C0);
+
+    %         % Lambdas_shifted(kk2) = lambdas_homotopy;
+    %     end
+
+    % end
+
+    % Lambdas{kk} = Lambdas_shifted;    
+
     if mod(kk, 50) == 0
         fprintf('  processed %d / %d\n', kk, num_om)
     end
@@ -139,6 +159,29 @@ if do_debug
     title('DEBUG: Floquet exponents in complex plane', 'Interpreter', 'latex')
     axis tight; box on
 end
+end
+
+% -------------------------------------------------------------------------
+function lambdas = run_full_search(method, omega, X_col, sys_jac, alpha, n, N, L, ...
+                                    C0, real_interval, imag_interval, num_points, Mat_norm)
+    % dispatches to the grid search or the homotopy search for a full
+    % (non-warm-started) search of the Floquet exponents at a single omega
+    if nargin < 13, Mat_norm = []; end
+    switch lower(method)
+        case 'gridsearch'
+            if isempty(Mat_norm)
+                Mat_norm = build_mat_norm(omega, X_col, sys_jac, alpha, n, N, L);
+            end
+            lambdas_all = HillZeros(Mat_norm, omega, real_interval, imag_interval, num_points, 'newtoncomplexscalar');
+            lambdas = lambdas_all(abs(imag(lambdas_all)) <= omega/2);
+        case 'homotopysearch'
+            J_rfs   = jacobian_fourier_coeffs(X_col, omega, sys_jac, alpha, n, N, L);
+            J_cell  = real2complex_fourier_jacobian(J_rfs);
+            lambdas = HillZeros_Homotopy(omega, alpha, J_cell, C0);
+        otherwise
+            error('getFloquetExponents:unknownSearchMethod', ...
+                  'Unknown SearchMethod ''%s'' (use ''HomotopySearch'' or ''GridSearch'')', method)
+    end
 end
 
 % -------------------------------------------------------------------------
