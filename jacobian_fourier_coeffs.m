@@ -6,7 +6,7 @@ function J_realFourierStacked = jacobian_fourier_coeffs(X_sol, omega_sol, sys_ja
 % rows is the k-th Fourier coefficient matrix of J(t), ordered as
 % (J^(0).', J^(C1).', ..., J^(CN).', J^(S1).', ..., J^(SN).')
 
-[V, W, ~,D_alpha] = fourier_matrices(omega_sol, n, N, L, alpha);
+[V, W, ~, D_alpha] = fourier_matrices(omega_sol, n, N, L, alpha);
 T_period   = 2*pi / omega_sol;
 t_period   = (0 : T_period/L : T_period*(1-1/L))';
 

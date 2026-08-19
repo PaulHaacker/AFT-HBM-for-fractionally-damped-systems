@@ -44,12 +44,15 @@ ax2 = subplot(1,2,2); hold(ax2, 'on');
 scatter(ax2, real(all_lambda), imag(all_lambda), 10, [0.7, 0.7, 0.7], 'filled', ...
     'MarkerFaceAlpha', 0.3, 'HandleVisibility', 'off')
 xline(ax2, 0, 'k--', 'HandleVisibility', 'off');
-sc = scatter(ax2, real(Lambdas{1}), imag(Lambdas{1}), 40, 'filled');
+strip_lo = yline(ax2, -om(1)/2, 'k', 'LineWidth', 1, 'DisplayName', 'principal strip $(-\omega/2,\,\omega/2]$');
+strip_hi = yline(ax2, om(1)/2, 'k', 'LineWidth', 1, 'HandleVisibility', 'off');
+sc = scatter(ax2, real(Lambdas{1}), imag(Lambdas{1}), 40, 'filled', 'DisplayName', 'Floquet exponents at selected $\omega$');
 hold(ax2, 'off');
 xlim(ax2, re_lim); ylim(ax2, im_lim);
 xlabel(ax2, '$\mathrm{Re}(\lambda)$', 'Interpreter', 'latex')
 ylabel(ax2, '$\mathrm{Im}(\lambda)$', 'Interpreter', 'latex')
 title(ax2, sprintf('Floquet exponents at $\\omega = %.4f$ ($k = 1$)', om(1)), 'Interpreter', 'latex')
+legend(ax2, 'Interpreter', 'latex', 'Location', 'best')
 set(ax2, 'FontSize', 12)
 grid(ax2, 'on')
 
@@ -64,6 +67,8 @@ uicontrol('Parent', fig, 'Style', 'slider', 'Units', 'normalized', ...
         lam = Lambdas{kk};
         set(marker, 'XData', om(kk), 'YData', A_HBM(kk))
         set(sc, 'XData', real(lam), 'YData', imag(lam))
+        strip_lo.Value = -om(kk)/2;
+        strip_hi.Value =  om(kk)/2;
         title(ax2, sprintf('Floquet exponents at $\\omega = %.4f$ ($k = %d$)', om(kk), kk), 'Interpreter', 'latex')
     end
 end

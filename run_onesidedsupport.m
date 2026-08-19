@@ -7,10 +7,10 @@ clear; clc; close all
 % delta = 0.2;
 % alpha = 1;
 
-% omega_start = 0.1;
+% omega_start = 1;
 % omega_end = 5;
 
-% N = 30;
+% N = 20;
 
 % L = 20*floor((2*N+1)*1.2); % number of sample points of one period
 % n = 2;
@@ -26,7 +26,7 @@ alpha = .25;
 omega_start = 1;
 omega_end = 5;
 
-N = 30;
+N = 20; 30;
 
 L = 20*floor((2*N+1)*1.2); % number of sample points of one period
 n = 2;
@@ -34,7 +34,7 @@ n = 2;
 %% Arclength continuation with HBM
 X0 = zeros(n*(2*N+1),1);
 
-[om,X] = arclength_continuation_HBM(@(t,x,x_frac,omega) onesidedsupport_jac_frac(t,x,x_frac,mu,beta,gamma,delta,omega),alpha,omega_start,omega_end,X0,n,N,L,1e-5,100,1e-2,0.1);
+[om,X] = arclength_continuation_HBM(@(t,x,x_frac,omega) onesidedsupport_jac_frac(t,x,x_frac,mu,beta,gamma,delta,omega),alpha,omega_start,omega_end,X0,n,N,L,1e-5,100,1e-2,5e-2);
 
 A_HBM = zeros(length(om),1);
 for i=1:length(om)

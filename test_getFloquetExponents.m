@@ -3,33 +3,36 @@ clear; clc;
 %  close all
 %% Parameters of [PadovanSawicki1998]
 
-% sigma = 1;
-% beta = 0.01; %0.01
-% gamma = 1;
-% delta = 0.15;
-% alpha = 1/4;
-% omega_start = 0.1;
-% omega_end = 2;
-
-% N = 10;
-
-% L = 20*floor((2*N+1)*1.2); % number of sample points of one period
-% n = 2;
-
-%% Parameters of Workshop
 sigma = 1;
-beta = 0.04;
+beta = 0.01; %0.01
 gamma = 1;
-delta = 0.1;
-alpha = 1;
-
+delta = 0.15;
+alpha = 1/4;
 omega_start = 0.1;
 omega_end = 2;
 
 N = 10;
+N_Hill = [];
 
 L = 20*floor((2*N+1)*1.2); % number of sample points of one period
 n = 2;
+
+%% Parameters of Workshop
+% sigma = 1;
+% beta = 0.04;
+% gamma = 1;
+% delta = 0.1;
+% alpha = 1;
+
+% omega_start = 0.1;
+% omega_end = 2;
+
+% N = 3;
+
+% N_Hill = 6;
+
+% L = 20*floor((2*N+1)*1.2); % number of sample points of one period
+% n = 2;
 
 %% random parameters
 
@@ -56,6 +59,7 @@ for i=1:length(om)
   [t,x] = fourier_coeff_to_time_series(X(:,i),om(i),n,N,L);
   A_HBM(i) = max(x(:,1));
 end
+figure
 plot(om,A_HBM,'-','DisplayName',sprintf('$\\alpha = %g$',alpha))
 
 hold off
@@ -70,7 +74,7 @@ imag_interval = [-1/2, 1/2]*om(1);
 num_points = 5; % grid resolution for initial search of Floquet exponents at om(1) via FractionalHillZeros
 Lambdas = getFloquetExponents(om, X, @(t,x,x_frac,omega) duffing_jac_frac(t,x,x_frac,sigma,beta,gamma,delta,omega),...
                                 alpha, n, N, L, ...
-                                real_interval, imag_interval, num_points);
+                                real_interval, imag_interval, num_points, [], [], N_Hill);
 
 %% plotting       
 % classify stability from Floquet exponents

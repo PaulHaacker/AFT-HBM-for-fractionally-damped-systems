@@ -1,5 +1,5 @@
 function Lambdas = getFloquetExponents(om, X, sys_jac, alpha, n, N, L, ...
-                                       real_interval, imag_interval, num_points, debug, SearchMethod)
+                                       real_interval, imag_interval, num_points, debug, SearchMethod, N_Hill)
 % Computes Floquet exponents along a HBM continuation curve [om, X] of a fractionally damped system of the form \dot x= f(t, x, D^\alpha x) with linearization dynamics \dot y = J(t)y + C0 D^{\alpha}y, i.e. we assume f is linear in D^\alpha x.
 %
 % Strategy:
@@ -23,10 +23,17 @@ function Lambdas = getFloquetExponents(om, X, sys_jac, alpha, n, N, L, ...
 %   SearchMethod   : 'HomotopySearch' (default) or 'GridSearch' — method used
 %                    for the full search at om(1) and for every fallback
 %                    search during the continuation
+%   N_hill         : Fourier truncation for Hill's method (default empty, resulting in 
+%                    taking just the number of harmonics N from the HBM solution)
 %
 % Output:
 %   Lambdas : cell array, Lambdas{kk} is a column vector of Floquet exponents at om(kk)
 
+if nargin < 13 ,  N_Hill  = [];      end
+if N_Hill < N,  
+    N_Hill  = [];
+    warning('N_Hill must be at least as large as N, continue with N = N_Hill')
+end
 if nargin < 12 || isempty(SearchMethod),  SearchMethod  = 'HomotopySearch';      end
 if nargin < 11 || isempty(debug),         debug         = '';                    end
 if nargin < 10 || isempty(num_points),    num_points    = 5;                     end
@@ -43,16 +50,16 @@ Lambdas = cell(num_om, 1);
 
 % --- kk = 1: full search ---
 fprintf('getFloquetExponents: %s at om(1) = %.4f ... ', SearchMethod, om(1))
-tic
+% tic
 Lambdas{1} = run_full_search(SearchMethod, om(1), X(:,1), sys_jac, alpha, n, N, L, ...
-                              C0, real_interval, imag_interval, num_points);
+                              C0, real_interval, imag_interval, num_points, N_Hill);
 fprintf('%.2f s, %d exponents found\n', toc, length(Lambdas{1}))
 
 % --- kk >= 2: warm-start Newton ---
 tol_group_dup = 1e-4; % tolerance (in lambda-space) below which two exponents are considered aliases of the same group
 n_exp_ref = length(Lambdas{1});
 for kk = 2:num_om
-    Mat_norm    = build_mat_norm(om(kk), X(:,kk), sys_jac, alpha, n, N, L);
+    Mat_norm    = build_mat_norm(om(kk), X(:,kk), sys_jac, alpha, n, N, L, N_Hill);
     Lambdas{kk} = HillZeros_Warmstart(Mat_norm, Lambdas{kk-1});
     
     % rerun homotopy search if count changed, warm-start returned nothing,
@@ -69,7 +76,7 @@ for kk = 2:num_om
         end
         tic
         Lambdas{kk} = run_full_search(SearchMethod, om(kk), X(:,kk), sys_jac, alpha, n, N, L, ...
-                                       C0, real_interval, imag_interval, num_points, Mat_norm);
+                                       C0, real_interval, imag_interval, num_points, N_Hill);
         fprintf('%.2f s, %d exponents found\n', toc, length(Lambdas{kk}))
     end
 
@@ -163,20 +170,24 @@ end
 
 % -------------------------------------------------------------------------
 function lambdas = run_full_search(method, omega, X_col, sys_jac, alpha, n, N, L, ...
-                                    C0, real_interval, imag_interval, num_points, Mat_norm)
+                                    C0, real_interval, imag_interval, num_points, N_Hill)
     % dispatches to the grid search or the homotopy search for a full
     % (non-warm-started) search of the Floquet exponents at a single omega
-    if nargin < 13, Mat_norm = []; end
     switch lower(method)
         case 'gridsearch'
-            if isempty(Mat_norm)
-                Mat_norm = build_mat_norm(omega, X_col, sys_jac, alpha, n, N, L);
-            end
+            Mat_norm = build_mat_norm(omega, X_col, sys_jac, alpha, n, N, L, N_Hill);
             lambdas_all = HillZeros(Mat_norm, omega, real_interval, imag_interval, num_points, 'newtoncomplexscalar');
             lambdas = lambdas_all(abs(imag(lambdas_all)) <= omega/2);
         case 'homotopysearch'
             J_rfs   = jacobian_fourier_coeffs(X_col, omega, sys_jac, alpha, n, N, L);
             J_cell  = real2complex_fourier_jacobian(J_rfs);
+
+            if ~isempty(N_Hill)
+                zero_block = zeros(n);
+                J_added = repmat({zero_block}, 1, 2*(N_Hill-N));  % initialise with zeros
+                J_cell = [J_added, J_cell, J_added]; % pad with zeros to get 4N_Hill+1 blocks
+            end
+
             lambdas = HillZeros_Homotopy(omega, alpha, J_cell, C0);
         otherwise
             error('getFloquetExponents:unknownSearchMethod', ...
@@ -204,10 +215,18 @@ function tf = has_alias_duplicate(lambdas, om, tol)
 end
 
 % -------------------------------------------------------------------------
-function Mat_norm = build_mat_norm(omega, X_col, sys_jac, alpha, n, N, L)
+function Mat_norm = build_mat_norm(omega, X_col, sys_jac, alpha, n, N, L, N_Hill)
     J_rfs    = jacobian_fourier_coeffs(X_col, omega, sys_jac, alpha, n, N, L);
-    J_cell   = real2complex_fourier_jacobian(J_rfs);
+    J_cell   = real2complex_fourier_jacobian(J_rfs); %   J_cell : cell array of 4N+1 complex n x n matrices ordered as {J_{-2N}, ..., J_0, ..., J_{+2N}} where J_k = 0 for N < |k| <= 2N
+
     [~,~,C0] = sys_jac(0, zeros(n,1), zeros(n,1), omega); % using that right-hand side is linear in D^\alpha x, so C0 is constant
+
+    if ~isempty(N_Hill)
+        zero_block = zeros(n);
+        J_added = repmat({zero_block}, 1, 2*(N_Hill-N));  % initialise with zeros
+        J_cell = [J_added, J_cell, J_added]; % pad with zeros to get 4N_Hill+1 blocks
+    end
+        
     Mat_H    = giveHill(omega, alpha, J_cell, C0);
     Mat_norm = normalizeMatrix(Mat_H, n, alpha);
 end
