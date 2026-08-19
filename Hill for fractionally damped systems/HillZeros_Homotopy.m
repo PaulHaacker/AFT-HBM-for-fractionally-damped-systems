@@ -28,10 +28,10 @@ if nargin < 5, max_iter    = 40;    end
 % attention! we assume that the underlying system is a mechanical system and linear in the fractional derivative.
 
 % extract system dimension
-test = size(cell2mat(J_cell));
-n = test(1);           % n - system size
+help = size(cell2mat(J_cell));
+n = help(1);           % n - system size
 f = n/2;           % f - number of degrees of freedom of mechanical system
-N = (test(2)/n-1)/4;   % N - number of frequencies considered in truncation
+N = (help(2)/n-1)/4;   % N - number of frequencies considered in truncation
 if N~=int8(N)
     error('wrong dimension of J')
 end
@@ -48,7 +48,28 @@ in_strip = imag(eig_all) > -omega/2 & imag(eig_all) <= omega/2;
 lambdas  = eig_all(in_strip);
 fprintf('FractionalHillZeros_Homotopy: %d exponents in principal strip at alpha=1\n', length(lambdas))
 
-if isempty(lambdas) || alpha == 1
+
+% % DEBUGGING!
+% if omega > 2.3
+%     1;
+% end
+
+if isempty(lambdas)
+    tolerance_principalStrip = 1e-2; % relaxation tolerance for principal strip check, to avoid losing exponents due to numerical error
+    in_strip = imag(eig_all) > -omega/2 + tolerance_principalStrip & imag(eig_all) <= omega/2 + tolerance_principalStrip;
+    lambdas = eig_all(in_strip);
+    if length(lambdas)> n
+        lambdas = lambdas(imag(lambdas) >= 0);
+        if length(lambdas) ~= n
+            warning('unexpected number of Floquet exponents in principal strip at alpha=1: %d (expected %d), returning empty vector', length(lambdas), n)
+            lambdas = [];
+            return
+        end
+    end
+    fprintf('Found %d exponents in relaxed principal strip at alpha=1\n', length(lambdas))
+end
+
+if alpha == 1
     return
 end
 
