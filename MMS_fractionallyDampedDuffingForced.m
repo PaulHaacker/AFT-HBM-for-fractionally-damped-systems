@@ -1,16 +1,16 @@
-%% MMS_standardDuffingForced.m
+%% MMS_fractionallyDampedDuffingForced.m
 % Multiple-scales (MMS) analysis of the standard forced Duffing oscillator.
 %
 % system equations:
-%   \ddot x + \epsilon \beta \dot x + \omega_0^2 x + \epsilon \mu_{nl} x^3 = \epsilon f \cos(\Omega t)
+%   \ddot x + \epsilon \beta D^\alpha x + \omega_0^2 x + \epsilon \mu_{nl} x^3 = \epsilon f \cos(\Omega t)
 %
 % 0-order approximation: x(t) = a(t) cos(\Omega t - \gamma(t)), with slow dynamics of a(t), gamma(t) governed by the amplitude/phase equations below.
 % Amplitude/phase equations:
-%   da/dt    = -beta/2 * a + f/(2*omega0) * sin(gamma)
-%   dgamma/dt = sigma - 3/8 * (mu_nl/omega0) * a^2 + f/(2*omega0*a) * cos(gamma)
+%   da/dt    = -beta/2 * omega0^(\alpha -1) * \sin(\alpha \pi/2) * a + f/(2*omega0) * sin(gamma)
+%   dgamma/dt = sigma -beta/2 * omega0^(\alpha -1) * \cos(\alpha \pi/2) - 3/8 * (mu_nl/omega0) * a^2 + f/(2*omega0*a) * cos(gamma)
 %
 % Equilibria (a,sigma) satisfy
-%   0 = a^2 * ( (beta/2)^2 + (sigma - 3/8*(mu_nl/omega0)*a^2)^2 ) - (f/(2*omega0))^2
+%   0 = a^2 * ( (beta/2* omega0^(\alpha -1) * \sin(\alpha \pi/2))^2 + (sigma -beta/2 * omega0^(\alpha -1) * \cos(\alpha \pi/2) - 3/8*(mu_nl/omega0)*a^2)^2 ) - (f/(2*omega0))^2
 %
 % This equation is traced with pseudo-arclength continuation (see
 % arclength_continuation.m) in the detuning parameter sigma. Note that
@@ -28,8 +28,9 @@
 
 clear; clc; close all
 
-%% Parameters (standard hardening Duffing oscillator, weak damping/forcing)
-beta   = 0.1;   % damping coefficient
+%% Parameters (fractionally damped hardening Duffing oscillator, weak damping/forcing)
+alpha  = 0.25;   % fractional order of the derivative
+beta   = .3;   % damping coefficient
 f      = 0.2;   % forcing amplitude
 omega0 = 1;     % natural frequency
 mu_nl  = 1;     % cubic nonlinearity coefficient (hardening for mu_nl > 0)
@@ -38,11 +39,17 @@ sigma_start = -3;
 sigma_end   = 3;
 
 %% Initial guess: low-amplitude solution at sigma_start
-% F(a,sigma) is, in terms of b = a^2, a cubic k^2*b^3 - 2*sigma*k*b^2 +
-% (sigma^2+(beta/2)^2)*b - c^2 = 0 with k = 3/8*mu_nl/omega0, c = f/(2*omega0).
+% F(a,sigma) is, in terms of b = a^2, a cubic k^2*b^3 - 2*s*k*b^2 +
+% (s^2+B^2)*b - c^2 = 0 with k = 3/8*mu_nl/omega0, c = f/(2*omega0),
+% B = beta/2*omega0^(alpha-1)*sin(alpha*pi/2) (fractional effective damping),
+% s = sigma_start - sigma_shift, sigma_shift = beta/2*omega0^(alpha-1)*cos(alpha*pi/2)
+% (fractional detuning shift).
 k = 3/8 * mu_nl/omega0;
 c = f/(2*omega0);
-poly_coeffs = [k^2, -2*sigma_start*k, sigma_start^2 + (beta/2)^2, -c^2];
+B_eff       = beta/2 * omega0^(alpha-1) * sin(alpha*pi/2);
+sigma_shift = beta/2 * omega0^(alpha-1) * cos(alpha*pi/2);
+s = sigma_start - sigma_shift;
+poly_coeffs = [k^2, -2*s*k, s^2 + B_eff^2, -c^2];
 b_roots = roots(poly_coeffs);
 b_roots = b_roots(abs(imag(b_roots)) < 1e-9 & real(b_roots) > 0);
 a0 = sqrt(min(real(b_roots)));
@@ -52,15 +59,15 @@ a0 = sqrt(min(real(b_roots)));
 % arclength_continuation.m rejects corrector steps with mu <= 0
 tol         = 1e-10;
 maxiter     = 100;
-step_start  = 0.01;
-step_max    = 0.05;
+step_start  = 1e-3;
+step_max    = 1e-2;
 
 offset    = max(0, 1 - sigma_start);
 eta_start = sigma_start + offset;
 eta_end   = sigma_end   + offset;
 
 [eta_vec, a_vec] = arclength_continuation(...
-    @(x,eta) MMS_equilibrium(x, eta - offset, beta, f, omega0, mu_nl), ...
+    @(x,eta) MMS_equilibrium(x, eta - offset, beta, f, omega0, mu_nl, alpha), ...
     eta_start, eta_end, a0, tol, maxiter, step_start, step_max);
 sigma_vec = eta_vec - offset;
 
@@ -70,7 +77,7 @@ is_stable_MMS = false(1, num_pts);
 for kk = 1:num_pts
     a   = a_vec(kk);
     sig = sigma_vec(kk);
-    J   = MMS_jacobian(a, sig, beta, f, omega0, mu_nl);
+    J   = MMS_jacobian(a, sig, beta, f, omega0, mu_nl, alpha);
     is_stable_MMS(kk) = all(real(eig(J)) < 0);
 end
 
@@ -84,7 +91,8 @@ sigma = omega0^2; % stiffness coefficient
 delta = epsilon*beta; % damping coefficient
 beta = epsilon*mu_nl; % nonlinear stiffness coefficient
 gamma = epsilon*f; % forcing amplitude
-alpha = 1; % fractional order of the derivative - here regular damping, so alpha = 1
+% alpha carries over from the Parameters section (fractional order of the
+% damping term) so the HBM system matches the fractionally damped MMS derivation
 
 omega_start = omega0 + sigma_start*epsilon; % start frequency for HBM continuation
 omega_end = omega0 + sigma_end*epsilon; % end frequency for HBM continuation
@@ -157,42 +165,56 @@ plot_stability_curve(om, A_HBM, is_stable_hbm, color_hbm)
 plot_stability_curve(Om_mms, a_vec, is_stable_MMS, color_MMS)
 
 % proxy handles so the legend shows one clean entry per method
-h_hbm = plot(nan, nan, '-', 'Color', color_hbm, 'LineWidth', 1.5, 'DisplayName', 'HBM');
+h_hbm = plot(nan, nan, '-', 'Color', color_hbm, 'LineWidth', 1.5, 'DisplayName', ['HBM, $N = $', num2str(N), ' harmonics']);
 h_MMS = plot(nan, nan, '-', 'Color', color_MMS, 'LineWidth', 1.5, 'DisplayName', 'MMS');
 legend([h_hbm, h_MMS], 'Location', 'best', 'Interpreter', 'latex')
 hold off
 
-xlabel('$\Omega$', 'Interpreter', 'latex')
+xlabel('forcing frequency $\Omega$', 'Interpreter', 'latex')
 ylabel('$\max\, x(t)$', 'Interpreter', 'latex')
-title(['Forced Duffing oscillator: $\ddot x + \varepsilon \beta \dot x + \omega_0^2 x + \varepsilon \mu_{nl} x^3 = \varepsilon f \cos(\Omega t)$, $\varepsilon = $ ', num2str(epsilon)], 'Interpreter', 'latex')
+title({'Fractionally damped Duffing oscillator:', ...
+       ['$\ddot x + \varepsilon \beta D^\alpha x + \omega_0^2 x + \varepsilon \mu_{nl} x^3 = \varepsilon f \cos(\Omega t)$, $\alpha = $ ', num2str(alpha), ', $\varepsilon = $ ', num2str(epsilon)]}, 'Interpreter', 'latex')
 
 %% -------------------------------------------------------------------
-function [F, dFdx, dFdmu] = MMS_equilibrium(x, mu, beta, f, omega0, mu_nl)
+function [F, dFdx, dFdmu] = MMS_equilibrium(x, mu, beta, f, omega0, mu_nl, alpha)
 % Residual and Jacobians of the MMS equilibrium equation for use with
 % arclength_continuation.m. x = a (amplitude), mu = sigma (detuning).
+%
+% Fractional damping of order alpha contributes an effective linear
+% damping B = beta/2*omega0^(alpha-1)*sin(alpha*pi/2) (replacing beta/2
+% of the classical, alpha=1 case) and a constant detuning shift
+% sigma_shift = beta/2*omega0^(alpha-1)*cos(alpha*pi/2). With those two
+% substitutions the equilibrium equation has the same algebraic form as
+% the classical (integer-order) case.
 a   = x(1);
 sig = mu;
 k   = 3/8 * mu_nl/omega0;
 c   = f/(2*omega0);
-D   = sig - k*a^2;
+B           = beta/2 * omega0^(alpha-1) * sin(alpha*pi/2);
+sigma_shift = beta/2 * omega0^(alpha-1) * cos(alpha*pi/2);
+D   = sig - sigma_shift - k*a^2;
 
-F     = a^2*((beta/2)^2 + D^2) - c^2;
-dFdx  = 2*a*((beta/2)^2 + D^2) - 4*k*a^3*D;
+F     = a^2*(B^2 + D^2) - c^2;
+dFdx  = 2*a*(B^2 + D^2) - 4*k*a^3*D;
 dFdmu = 2*a^2*D;
 end
 
 %% -------------------------------------------------------------------
-function J = MMS_jacobian(a, sig, beta, f, omega0, mu_nl)
+function J = MMS_jacobian(a, sig, beta, f, omega0, mu_nl, alpha)
 % Jacobian of the (a,gamma) dynamics at an equilibrium (a,sig), with
 % sin(gamma), cos(gamma) eliminated algebraically via the equilibrium
 % conditions:
-%   sin(gamma) =  beta*a*omega0/f
-%   cos(gamma) = -2*omega0*a*D/f,   D = sig - 3/8*(mu_nl/omega0)*a^2
+%   sin(gamma) =  2*omega0*B*a/f
+%   cos(gamma) = -2*omega0*a*D/f,   D = sig - sigma_shift - 3/8*(mu_nl/omega0)*a^2
+% where B, sigma_shift are the fractional effective damping and detuning
+% shift defined in MMS_equilibrium.
 k = 3/8 * mu_nl/omega0;
-D = sig - k*a^2;
+B           = beta/2 * omega0^(alpha-1) * sin(alpha*pi/2);
+sigma_shift = beta/2 * omega0^(alpha-1) * cos(alpha*pi/2);
+D = sig - sigma_shift - k*a^2;
 
-J = [ -beta/2,        -a*D;
-       D/a - 2*k*a,   -beta/2 ];
+J = [ -B,            -a*D;
+       D/a - 2*k*a,  -B ];
 end
 
 %% -------------------------------------------------------------------
