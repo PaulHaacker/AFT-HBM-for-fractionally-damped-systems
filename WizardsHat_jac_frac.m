@@ -16,7 +16,7 @@ f = [x(2) ;
      -delta*x_frac(1)-sigma*x(1)-iota*x(1)^2-beta*x(1)^3+gamma*cos(omega*t) ];
 
 dfdx = [ 0, 1;
-         -sigma-3*beta*x(1)^2, 0];
+         -sigma-2*iota*x(1)-3*beta*x(1)^2, 0];
 
 dfdx_frac = [0, 0;
           -delta, 0];  

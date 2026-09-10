@@ -1,18 +1,53 @@
 %% WizardsHat frequency response curve
 clear; clc;
-%  close all
+ close all
 %% Parameters of [AmabelliEtAl2021]
+
+% sigma = 4;
+% iota = 1.75; %0.01
+% beta = .35; %0.01
+% gamma = 0.2;
+% delta = 0.02;
+% alpha = 0.9;
+% omega_start = 1;
+% omega_end = 3;
+
+% N = 5;
+% N_Hill = [];
+
+% L = 20*floor((2*N+1)*1.2); % number of sample points of one period
+% n = 2;
+
+%% random Parameters 
+
+% sigma = 4;
+% iota = 1.75; %0.01
+% beta = .35; %0.01
+% gamma = 0.2;
+% delta = 0.05;
+% alpha = .75;
+% omega_start = 1;
+% omega_end = 3;
+
+% N = 10;
+% N_Hill = [];
+
+% L = 20*floor((2*N+1)*1.2); % number of sample points of one period
+% n = 2;
+
+
+%% difficult Parameters (stability change at fold bifurcation doesnt get recognized)
 
 sigma = 4;
 iota = 1.75; %0.01
 beta = .35; %0.01
 gamma = 0.2;
-delta = 0.02;
-alpha = 0.9;
+delta = 0.1;
+alpha = .25;
 omega_start = 1;
 omega_end = 3;
 
-N = 5;
+N = 10;
 N_Hill = [];
 
 L = 20*floor((2*N+1)*1.2); % number of sample points of one period
@@ -22,9 +57,9 @@ n = 2;
 %% Arclength continuation with HBM
 X0 = zeros(n*(2*N+1),1);
 
-plot_fun = @(omega, X) plot_fun_HBM(omega, X, n, N, L);
+% plot_fun = @(omega, X) plot_fun_HBM(omega, X, n, N, L);
 
-[om,X] = arclength_continuation_HBM(@(t,x,x_frac,omega) WizardsHat_jac_frac(t,x,x_frac,sigma,iota,beta,gamma,delta,omega),alpha,omega_start,omega_end,X0,n,N,L,1e-5,100,1e-2,0.1, plot_fun);
+[om,X] = arclength_continuation_HBM(@(t,x,x_frac,omega) WizardsHat_jac_frac(t,x,x_frac,sigma,iota,beta,gamma,delta,omega),alpha,omega_start,omega_end,X0,n,N,L,1e-5,100,1e-2,0.1); %, plot_fun);
 
 A_HBM = zeros(length(om),1);
 for i=1:length(om)
@@ -37,7 +72,7 @@ plot(om,A_HBM,'-','DisplayName',sprintf('$\\alpha = %g$',alpha))
 hold off
 xlabel('$\omega$','Interpreter','latex')
 ylabel('$\textrm{max} \, q(t)$','Interpreter','latex')
-title('Nonlinear FRF of the Duffing system','Interpreter','latex')
+title('Nonlinear FRF','Interpreter','latex')
 legend('Interpreter','latex')
 
 %% computing Floquet exponents along continuation
@@ -55,7 +90,7 @@ is_unstable = false(length(om), 1);
 for kk = 1:length(om)
     if ~isempty(Lambdas{kk})
         if all(real(Lambdas{kk}) < 0)
-            is_stable(kk)   = true;
+        is_stable(kk)   = true;
         else
             is_unstable(kk) = true;
         end

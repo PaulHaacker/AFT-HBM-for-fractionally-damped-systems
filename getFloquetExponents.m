@@ -48,6 +48,9 @@ Lambdas = cell(num_om, 1);
 % extract C0 for homotopy search 
 [~,~,C0] = sys_jac(0, zeros(n,1), zeros(n,1), om(1)); % using that right-hand side is linear in D^\alpha x, so C0 is constant
 
+tol_group_dup = 1e-4; % tolerance (in lambda-space) below which two exponents are considered aliases of the same group
+tol_real      = 1e-6; % |Im(lambda)| below this is treated as Newton noise on an actually-real exponent, not a genuine complex pair
+
 % --- kk = 1: full search ---
 fprintf('getFloquetExponents: %s at om(1) = %.4f ... ', SearchMethod, om(1))
 % tic
@@ -55,8 +58,19 @@ Lambdas{1} = run_full_search(SearchMethod, om(1), X(:,1), sys_jac, alpha, n, N, 
                               C0, real_interval, imag_interval, num_points, N_Hill);
 fprintf('%.2f s, %d exponents found\n', toc, length(Lambdas{1}))
 
+if length(Lambdas{1}) < n
+    % run_full_search need not return exponents in conjugate pairs (e.g. a
+    % Newton search seeded off-axis may only converge onto one of a
+    % complex-conjugate pair); fill in any that are missing before deciding we are still short.
+    Lambdas{1} = add_missing_conjugates(Lambdas{1}, tol_real, tol_group_dup);
+end
+
+if length(Lambdas{1})< n
+    warning('getFloquetExponents: Only %d exponents found at om(1) = %.4f, expected %d', ...
+            length(Lambdas{1}), om(1), n);
+end
+
 % --- kk >= 2: warm-start Newton ---
-tol_group_dup = 1e-4; % tolerance (in lambda-space) below which two exponents are considered aliases of the same group
 n_exp_ref = length(Lambdas{1});
 for kk = 2:num_om
     Mat_norm    = build_mat_norm(om(kk), X(:,kk), sys_jac, alpha, n, N, L, N_Hill);
@@ -75,8 +89,37 @@ for kk = 2:num_om
                     kk, n_exp_ref, length(Lambdas{kk}), SearchMethod)
         end
         tic
+        % search in a box around the previous exponents, sized by the
+        % omega step just taken, rather than the whole default box;
+        % fall back to the default box if there are no previous
+        % exponents to center on
+        margin_factor = 5; % heuristic: how many step-sizes of slack around the previous exponents
+        if isempty(Lambdas{kk-1})
+            real_interval_kk = real_interval;
+            imag_interval_kk = imag_interval;
+        else
+            margin = margin_factor * abs(om(kk) - om(kk-1));
+            real_interval_kk = [min(real(Lambdas{kk-1})) - margin, max(real(Lambdas{kk-1})) + margin];
+            imag_interval_kk = [min(imag(Lambdas{kk-1})) - margin, max(imag(Lambdas{kk-1})) + margin];
+        end
         Lambdas{kk} = run_full_search(SearchMethod, om(kk), X(:,kk), sys_jac, alpha, n, N, L, ...
-                                       C0, real_interval, imag_interval, num_points, N_Hill);
+                                       C0, real_interval_kk, imag_interval_kk, num_points, N_Hill);
+        if length(Lambdas{kk}) < n
+            % run_full_search need not return exponents in conjugate pairs (e.g. a
+            % Newton search seeded off-axis may only converge onto one of a
+            % complex-conjugate pair); fill in any that are missing before deciding we are still short.
+            Lambdas_new = add_missing_conjugates(Lambdas{kk}, tol_real, tol_group_dup);
+            if length(Lambdas_new) > length(Lambdas{kk})
+                lambdas_new_afterNewton = HillZeros_Warmstart(Mat_norm, Lambdas_new(length(Lambdas{kk}):end));
+                if norm(lambdas_new_afterNewton - Lambdas_new(length(Lambdas{kk}):end)) < 1e-4
+                    fprintf('  added %d missing conjugates\n', length(Lambdas_new) - length(Lambdas{kk}))
+                    Lambdas{kk} = Lambdas_new;
+                else
+                    warning('getFloquetExponents: added conjugates did not converge under warm-start Newton, keeping original set')
+                end
+            end
+        end
+
         fprintf('%.2f s, %d exponents found\n', toc, length(Lambdas{kk}))
     end
 
@@ -175,9 +218,8 @@ function lambdas = run_full_search(method, omega, X_col, sys_jac, alpha, n, N, L
     % (non-warm-started) search of the Floquet exponents at a single omega
     switch lower(method)
         case 'gridsearch'
-            Mat_norm = build_mat_norm(omega, X_col, sys_jac, alpha, n, N, L, N_Hill);
-            lambdas_all = HillZeros(Mat_norm, omega, real_interval, imag_interval, num_points, 'newtoncomplexscalar');
-            lambdas = lambdas_all(abs(imag(lambdas_all)) <= omega/2);
+            lambdas = run_grid_search(omega, X_col, sys_jac, alpha, n, N, L, ...
+                                       real_interval, imag_interval, num_points, N_Hill);
         case 'homotopysearch'
             J_rfs   = jacobian_fourier_coeffs(X_col, omega, sys_jac, alpha, n, N, L);
             J_cell  = real2complex_fourier_jacobian(J_rfs);
@@ -189,10 +231,54 @@ function lambdas = run_full_search(method, omega, X_col, sys_jac, alpha, n, N, L
             end
 
             lambdas = HillZeros_Homotopy(omega, alpha, J_cell, C0);
+            if isempty(lambdas)
+                % the alpha=1 -> target-alpha homotopy path can genuinely
+                % break down (e.g. near a fold/bifurcation of the periodic
+                % orbit); GridSearch does not rely on continuous
+                % deformation from alpha=1, so fall back to it here
+                % instead of returning empty and repeating the same
+                % doomed homotopy attempt at every subsequent omega.
+                warning('getFloquetExponents:run_full_search:homotopyFailed', ...
+                        'HomotopySearch found no exponents at omega=%.4f; falling back to GridSearch', omega)
+                lambdas = run_grid_search(omega, X_col, sys_jac, alpha, n, N, L, ...
+                                           real_interval, imag_interval, num_points, N_Hill);
+            end
         otherwise
             error('getFloquetExponents:unknownSearchMethod', ...
                   'Unknown SearchMethod ''%s'' (use ''HomotopySearch'' or ''GridSearch'')', method)
     end
+end
+
+% -------------------------------------------------------------------------
+function lambdas = run_grid_search(omega, X_col, sys_jac, alpha, n, N, L, ...
+                                    real_interval, imag_interval, num_points, N_Hill)
+    Mat_norm = build_mat_norm(omega, X_col, sys_jac, alpha, n, N, L, N_Hill);
+    lambdas_all = HillZeros(Mat_norm, omega, real_interval, imag_interval, num_points, 'newtoncomplexscalar');
+    lambdas = lambdas_all(abs(imag(lambdas_all)) <= omega/2);
+end
+
+% -------------------------------------------------------------------------
+function lambdas = add_missing_conjugates(lambdas, tol_real, tol_dup)
+    % Ensures every exponent with a non-negligible imaginary part has its
+    % complex conjugate present in lambdas (the underlying system is
+    % real, so genuinely complex exponents must occur in conjugate
+    % pairs). Exponents with |Im(lambda)| <= tol_real are treated as
+    % numerically real (Newton residual noise) and left untouched, since
+    % appending a "conjugate" to those would just add a near-duplicate of
+    % the exponent itself.
+    n0 = length(lambdas);
+    added = [];
+    for ii = 1:n0
+        lam = lambdas(ii);
+        if abs(imag(lam)) <= tol_real
+            continue
+        end
+        others = [lambdas([1:ii-1, ii+1:n0]); added];
+        if isempty(others) || all(abs(others - conj(lam)) > tol_dup)
+            added = [added; conj(lam)]; %#ok<AGROW>
+        end
+    end
+    lambdas = [lambdas; added];
 end
 
 % -------------------------------------------------------------------------

@@ -48,6 +48,7 @@ while (mu(j) <= max(mu_start,mu_end)) && (mu(j)>=min(mu_start,mu_end))
     x_p = x(:,j) + sigma*v_x;
     mu_p = mu(j) + sigma*v_mu;
     if plot_on, plot_fun(mu(j),x(:,j)); drawnow; end
+    fprintf('arclength_cont: step no. %d step size %.4f continuation parameter %.4f \n ', j, sigma, mu(j))
 
     % corrector
     conv = 0;

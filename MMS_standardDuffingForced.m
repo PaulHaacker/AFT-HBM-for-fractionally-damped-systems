@@ -78,7 +78,7 @@ end
 
 % convert parameters
 
-epsilon = 0.3; % small parameter for weak damping/forcing/nonlinearity
+epsilon = 0.01; % small parameter for weak damping/forcing/nonlinearity
 
 sigma = omega0^2; % stiffness coefficient
 delta = epsilon*beta; % damping coefficient
@@ -89,7 +89,7 @@ alpha = 1; % fractional order of the derivative - here regular damping, so alpha
 omega_start = omega0 + sigma_start*epsilon; % start frequency for HBM continuation
 omega_end = omega0 + sigma_end*epsilon; % end frequency for HBM continuation
 
-N = 1;
+N = 10;
 
 N_Hill = [];
 
